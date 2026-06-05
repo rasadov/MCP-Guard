@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -75,10 +76,12 @@ func (h *Handlers) Register(r *gin.RouterGroup) {
 	r.GET("/policies", JWTMiddleware(h.jwt), RequireAdmin(), h.listPolicies)
 	r.POST("/policies", JWTMiddleware(h.jwt), RequireAdmin(), h.createPolicy)
 	r.PUT("/policies/:id", JWTMiddleware(h.jwt), RequireAdmin(), h.updatePolicy)
+	r.PATCH("/policies/:id/deny-tools", JWTMiddleware(h.jwt), RequireAdmin(), h.patchPolicyDenyTools)
 	r.DELETE("/policies/:id", JWTMiddleware(h.jwt), RequireAdmin(), h.deletePolicy)
 
 	r.GET("/agents", JWTMiddleware(h.jwt), h.listAgents)
 	r.POST("/agents", JWTMiddleware(h.jwt), h.createAgent)
+	r.PUT("/agents/:id", JWTMiddleware(h.jwt), RequireAdmin(), h.updateAgent)
 	r.POST("/agents/:id/rotate-key", JWTMiddleware(h.jwt), h.rotateAgentKey)
 }
 
@@ -129,6 +132,7 @@ func (h *Handlers) googleCallback(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("mcp_guard_token", token, int(h.cfg.JWTExpiry.Seconds()), "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, "/")
 }
@@ -148,6 +152,7 @@ func (h *Handlers) devLogin(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("mcp_guard_token", token, int(h.cfg.JWTExpiry.Seconds()), "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, "/")
 }
@@ -156,8 +161,9 @@ func (h *Handlers) upsertGoogleUser(gUser *auth.GoogleUser) (*models.User, error
 	var user models.User
 	err := h.db.Where("google_sub = ? OR email = ?", gUser.Sub, gUser.Email).First(&user).Error
 	if err == gorm.ErrRecordNotFound {
+		sub := gUser.Sub
 		user = models.User{
-			GoogleSub: gUser.Sub,
+			GoogleSub: &sub,
 			Email:     gUser.Email,
 			Name:      gUser.Name,
 			Role:      "user",
@@ -167,7 +173,8 @@ func (h *Handlers) upsertGoogleUser(gUser *auth.GoogleUser) (*models.User, error
 	if err != nil {
 		return nil, err
 	}
-	user.GoogleSub = gUser.Sub
+	sub := gUser.Sub
+	user.GoogleSub = &sub
 	user.Email = gUser.Email
 	user.Name = gUser.Name
 	return &user, h.db.Save(&user).Error
@@ -261,8 +268,8 @@ func (h *Handlers) stats(c *gin.Context) {
 	h.db.Model(&models.AuditLog{}).Where("outcome = ?", "denied").Count(&denied)
 
 	type toolCount struct {
-		ToolName string
-		Count    int64
+		ToolName string `json:"tool_name"`
+		Count    int64  `json:"count"`
 	}
 	var topTools []toolCount
 	h.db.Model(&models.AuditLog{}).
@@ -394,6 +401,91 @@ func (h *Handlers) deletePolicy(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *Handlers) patchPolicyDenyTools(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var body struct {
+		ToolName string `json:"tool_name"`
+		Blocked  bool   `json:"blocked"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if body.ToolName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tool_name required"})
+		return
+	}
+
+	var pol models.Policy
+	if err := h.db.First(&pol, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+
+	rules, err := policy.ParseRules(pol.Rules)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid policy rules"})
+		return
+	}
+
+	if body.Blocked {
+		if !slices.Contains(rules.DenyTools, body.ToolName) {
+			rules.DenyTools = append(rules.DenyTools, body.ToolName)
+		}
+	} else {
+		rules.DenyTools = slices.DeleteFunc(rules.DenyTools, func(t string) bool {
+			return t == body.ToolName
+		})
+	}
+
+	encoded, err := json.Marshal(rules)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	pol.Rules = datatypes.JSON(encoded)
+	if err := h.db.Save(&pol).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, pol)
+}
+
+func (h *Handlers) updateAgent(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var body struct {
+		SkillID *uuid.UUID `json:"skill_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var agent models.Agent
+	if err := h.db.First(&agent, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	agent.SkillID = body.SkillID
+	if err := h.db.Save(&agent).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.db.Preload("Skill").First(&agent, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, agent)
 }
 
 func (h *Handlers) listAgents(c *gin.Context) {

@@ -85,6 +85,25 @@ func (e *Engine) FilterTools(agent *models.Agent, policies []models.Policy, tool
 	return allowed
 }
 
+// FilterToolsBySkill exposes skill-permitted tools in tools/list. Policy denials
+// are enforced on tools/call so blocked attempts appear in the audit log.
+func (e *Engine) FilterToolsBySkill(agent *models.Agent, tools []string) []string {
+	if agent == nil || agent.Skill == nil {
+		return nil
+	}
+	skillTools, err := ParseToolList(agent.Skill.Tools)
+	if err != nil {
+		return nil
+	}
+	var allowed []string
+	for _, tool := range tools {
+		if ToolAllowedBySkill(skillTools, tool) {
+			allowed = append(allowed, tool)
+		}
+	}
+	return allowed
+}
+
 func extractChannelID(params map[string]any) string {
 	if params == nil {
 		return ""

@@ -8,10 +8,24 @@
 
 ## Connect Gemini to MCP Guard
 
-```bash
-set MCP_GUARD_API_KEY=mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c
-gemini mcp add --transport http --header "Authorization: Bearer %MCP_GUARD_API_KEY%" mcp-guard http://localhost:8080/mcp
+Use the **MCP Guard agent API key** (not your Gemini API key):
+
 ```
+mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c
+```
+
+```powershell
+gemini mcp add --transport http --header "Authorization: Bearer mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c" mcp-guard http://localhost:8080/mcp
+```
+
+If you see `no server available` or `Disconnected`, the demo API key is missing from the database. Restart with a fresh volume or rebuild:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
+Check gateway logs for `demo credentials restored` or `seed data created`.
 
 ## Demo Flow
 

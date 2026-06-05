@@ -16,6 +16,7 @@ import (
 	"github.com/rasadov/mcp-guard/internal/auth"
 	"github.com/rasadov/mcp-guard/internal/models"
 	"github.com/rasadov/mcp-guard/internal/policy"
+	"github.com/rasadov/mcp-guard/internal/seed"
 	"gorm.io/gorm"
 )
 
@@ -39,10 +40,10 @@ func NewGateway(db *gorm.DB, downstream *Downstream, apiKeys *auth.APIKeyService
 }
 
 func (g *Gateway) Handler() http.Handler {
-	return mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
 		agent, err := g.authenticate(req)
 		if err != nil {
-			slog.Warn("mcp auth failed", "error", err)
+			slog.Warn("mcp auth failed", "error", err, "has_auth_header", req.Header.Get("Authorization") != "")
 			return nil
 		}
 		sessionID := req.Header.Get("Mcp-Session-Id")
@@ -52,6 +53,17 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		return g.serverForAgent(agent)
 	}, nil)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only require auth when establishing a new MCP session (no session header yet).
+		if r.Header.Get("Mcp-Session-Id") == "" {
+			if _, err := g.authenticate(r); err != nil {
+				http.Error(w, "unauthorized: set Authorization: Bearer <mcp_guard_api_key> (demo: "+seed.DemoAPIKey+")", http.StatusUnauthorized)
+				return
+			}
+		}
+		mcpHandler.ServeHTTP(w, r)
+	})
 }
 
 func (g *Gateway) authenticate(req *http.Request) (*models.Agent, error) {
@@ -102,15 +114,11 @@ func (g *Gateway) serverForAgent(agent *models.Agent) *mcp.Server {
 }
 
 func (g *Gateway) filteredListTools(ctx context.Context, agent *models.Agent, next mcp.MethodHandler, method string, req mcp.Request) (mcp.Result, error) {
-	policies, err := g.loadPolicies()
-	if err != nil {
-		return nil, err
-	}
 	var names []string
 	for name := range g.downstream.Tools() {
 		names = append(names, name)
 	}
-	allowed := g.policy.FilterTools(agent, policies, names)
+	allowed := g.policy.FilterToolsBySkill(agent, names)
 
 	result, err := next(ctx, method, req)
 	if err != nil {

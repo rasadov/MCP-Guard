@@ -1,11 +1,13 @@
 package mcpgw
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -27,16 +29,24 @@ func ConnectSlack(ctx context.Context, cfg config.Config) (*Downstream, error) {
 		return &Downstream{tools: map[string]*mcp.Tool{}, rawNames: map[string]string{}}, nil
 	}
 
+	slackEnv, err := slackMCPEnv(cfg.Slack.BotToken)
+	if err != nil {
+		slog.Warn("SLACK_BOT_TOKEN invalid for slack-mcp-server", "error", err)
+		return &Downstream{tools: map[string]*mcp.Tool{}, rawNames: map[string]string{}}, nil
+	}
+
 	cmd := exec.CommandContext(ctx, cfg.SlackMCPPath)
-	cmd.Env = append(os.Environ(),
-		"SLACK_MCP_XOXP_TOKEN="+cfg.Slack.BotToken,
-		"SLACK_MCP_ADD_MESSAGE_TOOL=true",
-	)
+	cmd.Env = append(os.Environ(), slackEnv...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-guard-proxy", Version: "0.1.0"}, nil)
 	transport := &mcp.CommandTransport{Command: cmd}
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return nil, fmt.Errorf("connect slack mcp: %w: %s", err, summarizeSlackStderr(msg))
+		}
 		return nil, fmt.Errorf("connect slack mcp: %w", err)
 	}
 
@@ -86,6 +96,44 @@ func (d *Downstream) Call(ctx context.Context, gatewayName string, args map[stri
 		Name:      rawName,
 		Arguments: args,
 	})
+}
+
+func summarizeSlackStderr(stderr string) string {
+	if strings.Contains(stderr, "Failed to fetch users") || strings.Contains(stderr, "RefreshUsers") {
+		return "slack-mcp-server missing users:read bot scope — add it, Reinstall to Workspace, update SLACK_BOT_TOKEN in .env, restart gateway"
+	}
+	if strings.Contains(stderr, "Failed to fetch channels") || strings.Contains(stderr, "zero channels") {
+		return "slack-mcp-server missing channel scopes — add channels:read, groups:read, im:read, mpim:read (and channels:history), Reinstall to Workspace, restart gateway"
+	}
+	for _, line := range strings.Split(stderr, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.Contains(line, "missing_scope") {
+			return "slack-mcp-server missing bot scopes — see OAuth & Permissions → Bot Token Scopes, then Reinstall to Workspace"
+		}
+		if strings.Contains(line, "invalid_auth") {
+			return "slack-mcp-server rejected the token (check SLACK_BOT_TOKEN is a valid xoxb- bot token)"
+		}
+	}
+	if len(stderr) > 300 {
+		return stderr[:300] + "..."
+	}
+	return stderr
+}
+
+func slackMCPEnv(token string) ([]string, error) {
+	env := []string{"SLACK_MCP_ADD_MESSAGE_TOOL=true"}
+	switch {
+	case strings.HasPrefix(token, "xoxb-"):
+		env = append(env, "SLACK_MCP_XOXB_TOKEN="+token)
+	case strings.HasPrefix(token, "xoxp-"):
+		env = append(env, "SLACK_MCP_XOXP_TOKEN="+token)
+	default:
+		return nil, fmt.Errorf("expected xoxb- (bot) or xoxp- (user) token, not app-level xapp- tokens")
+	}
+	return env, nil
 }
 
 func (d *Downstream) Close() error {

@@ -10,7 +10,7 @@ import (
 
 type User struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	GoogleSub string    `gorm:"uniqueIndex" json:"google_sub,omitempty"`
+	GoogleSub *string   `gorm:"uniqueIndex" json:"google_sub,omitempty"`
 	Email     string    `gorm:"uniqueIndex;not null" json:"email"`
 	Name      string    `json:"name"`
 	Role      string    `gorm:"not null;default:user" json:"role"`

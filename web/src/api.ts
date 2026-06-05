@@ -22,6 +22,26 @@ export type Stats = {
   top_tools: { tool_name: string; count: number }[];
 };
 
+export const DEV_LOGIN_URL = "/auth/dev-login?email=admin@mcpguard.local";
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export function isUnauthorized(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 401;
+}
+
+export function isForbidden(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 403;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api/v1${path}`, {
     credentials: "include",
@@ -30,30 +50,25 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || res.statusText);
+    throw new ApiError(body.error || res.statusText, res.status);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
 }
 
-export const client = {
-  me: () => api<User>("/me"),
-  stats: () => api<Stats>("/stats"),
-  audit: () => api<AuditLog[]>("/audit?limit=50"),
-  tools: () => api<{ tools: string[] }>("/tools"),
-  shadow: () => api<ShadowFlag[]>("/shadow"),
-  skills: () => api<Skill[]>("/skills"),
-  policies: () => api<Policy[]>("/policies"),
-  agents: () => api<Agent[]>("/agents"),
-  activeAgents: () => api<ActiveSession[]>("/agents/active"),
+export type PolicyRules = {
+  deny_tools?: string[];
+  deny_write_for_roles?: string[];
+  write_tools?: string[];
+  channel_allowlist?: Record<string, string[]>;
 };
 
-export type ShadowFlag = {
-  agent_name: string;
-  tool_name: string;
-  source: string;
-  message: string;
-  detected: string;
+export type Policy = {
+  id: string;
+  name: string;
+  description: string;
+  rules: PolicyRules;
+  enabled: boolean;
 };
 
 export type Skill = {
@@ -61,21 +76,14 @@ export type Skill = {
   name: string;
   slug: string;
   description: string;
-  tools: string[];
-};
-
-export type Policy = {
-  id: string;
-  name: string;
-  description: string;
-  rules: Record<string, unknown>;
-  enabled: boolean;
+  tools: string[] | string;
 };
 
 export type Agent = {
   id: string;
   name: string;
   skill_id?: string;
+  skill?: Skill;
 };
 
 export type ActiveSession = {
@@ -84,3 +92,43 @@ export type ActiveSession = {
   last_seen: string;
   agent?: Agent;
 };
+
+export const client = {
+  me: () => api<User>("/me"),
+  stats: () => api<Stats>("/stats"),
+  audit: () => api<AuditLog[]>("/audit?limit=50"),
+  tools: () => api<{ tools: string[] }>("/tools"),
+  skills: () => api<Skill[]>("/skills"),
+  policies: () => api<Policy[]>("/policies"),
+  agents: () => api<Agent[]>("/agents"),
+  activeAgents: () => api<ActiveSession[]>("/agents/active"),
+  setPolicyDenyTool: (policyId: string, toolName: string, blocked: boolean) =>
+    api<Policy>(`/policies/${policyId}/deny-tools`, {
+      method: "PATCH",
+      body: JSON.stringify({ tool_name: toolName, blocked }),
+    }),
+  updateAgentSkill: (agentId: string, skillId: string | null) =>
+    api<Agent>(`/agents/${agentId}`, {
+      method: "PUT",
+      body: JSON.stringify({ skill_id: skillId }),
+    }),
+};
+
+export function skillTools(skill: Skill | undefined): string[] {
+  if (!skill) return [];
+  if (Array.isArray(skill.tools)) return skill.tools;
+  try {
+    return JSON.parse(skill.tools as string);
+  } catch {
+    return [];
+  }
+}
+
+export function displayToolName(name: string | undefined | null): string {
+  if (!name) return "unknown";
+  return name.replace(/^slack\./, "").replace(/_/g, " ");
+}
+
+export function policyDenyTools(policy: Policy | undefined): string[] {
+  return policy?.rules?.deny_tools ?? [];
+}

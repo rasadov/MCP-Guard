@@ -17,7 +17,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
-ARG SLACK_MCP_VERSION=v1.1.28
+ARG SLACK_MCP_VERSION=v1.3.0
 RUN curl -fsSL -o /usr/local/bin/slack-mcp-server \
   "https://github.com/korotovsky/slack-mcp-server/releases/download/${SLACK_MCP_VERSION}/slack-mcp-server-linux-amd64" \
   && chmod +x /usr/local/bin/slack-mcp-server
