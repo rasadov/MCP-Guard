@@ -1,0 +1,65 @@
+# Gemini CLI Demo Script
+
+## Prerequisites
+
+1. MCP Guard running: `docker compose up`
+2. Gemini CLI installed
+3. Demo API key from seed: `mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c`
+
+## Connect Gemini to MCP Guard
+
+```bash
+set MCP_GUARD_API_KEY=mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c
+gemini mcp add --transport http --header "Authorization: Bearer %MCP_GUARD_API_KEY%" mcp-guard http://localhost:8080/mcp
+```
+
+## Demo Flow
+
+### 1. Allowed read action
+
+Ask Gemini:
+
+> Read recent messages from our Slack general channel and summarize them.
+
+Expected: `slack.conversations_history` allowed, audit log shows `outcome=allowed`.
+
+### 2. Blocked write (read-only skill)
+
+Ask Gemini:
+
+> Post the summary to #general.
+
+Expected: denied with `skill_denied` or `policy_denied`, visible in dashboard audit feed.
+
+### 3. Allowed write (poster skill)
+
+In dashboard, assign agent `gemini-demo` to `marketing-poster` skill, then retry post to allowed channel.
+
+Expected: `slack.conversations_add_message` allowed for channel `C00000000`.
+
+### 4. Blocked dangerous action
+
+Ask Gemini:
+
+> Create a new Slack usergroup called "ops-admins".
+
+Expected: denied via default policy (`slack.usergroups_create`).
+
+### 5. Shadow AI flag
+
+```bash
+curl -X POST http://localhost:8080/api/v1/shadow-events ^
+  -H "Cookie: mcp_guard_token=<admin-jwt>" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"agent_name\":\"gemini-demo\",\"tool_name\":\"slack.conversations_add_message\",\"source\":\"direct-slack-api\"}"
+```
+
+Open `/shadow` in dashboard to see the flag when no matching gateway audit exists.
+
+### 6. Export audit logs
+
+Dashboard → Audit → Export JSON/CSV, or:
+
+```bash
+curl "http://localhost:8080/api/v1/audit/export?format=csv" -H "Cookie: mcp_guard_token=<token>" -o audit.csv
+```
