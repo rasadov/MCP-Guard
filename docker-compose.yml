@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mcpguard
+      POSTGRES_PASSWORD: mcpguard
+      POSTGRES_DB: mcpguard
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcpguard -d mcpguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      ADDR: ":8080"
+      DATABASE_URL: postgres://mcpguard:mcpguard@postgres:5432/mcpguard?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      AUTH_DEV_MODE: "true"
+      SEED_ON_START: "true"
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_MCP_PATH: /usr/local/bin/slack-mcp-server
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:8080/auth/google/callback}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
