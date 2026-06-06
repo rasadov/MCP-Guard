@@ -15,7 +15,7 @@ export default function LoginPage() {
     client
       .authConfig()
       .then(setConfig)
-      .catch((err) => setConfigError(err instanceof Error ? err.message : "Failed to load auth options"));
+      .catch((err) => setConfigError(err instanceof Error ? err.message : "Failed to load sign-in options"));
   }, []);
 
   if (status === "loading") {
@@ -50,17 +50,10 @@ export default function LoginPage() {
           </div>
         )}
 
-        {config?.google_enabled && (
-          <a className="btn btn-google" href="/auth/google">
-            Sign in with Google
-          </a>
-        )}
-
         {config?.dev_login_enabled && (
           <form className="dev-login-form" onSubmit={handleDevLogin}>
-            {config?.google_enabled && <div className="login-divider">or</div>}
             <label className="field-label" htmlFor="dev-email">
-              Dev login email
+              Email
             </label>
             <input
               id="dev-email"
@@ -70,18 +63,17 @@ export default function LoginPage() {
               placeholder="admin@mcpguard.local"
               required
             />
-            <button type="submit" className="btn btn-secondary">
-              Continue with dev login
+            <button type="submit" className="btn">
+              Sign in
             </button>
           </form>
         )}
 
-        {!config && !configError && <p className="muted">Loading sign-in options...</p>}
+        {!config && !configError && <p className="muted">Loading...</p>}
 
-        {config && !config.google_enabled && !config.dev_login_enabled && (
+        {config && !config.dev_login_enabled && (
           <p className="muted">
-            No sign-in methods are configured. Set Google OAuth credentials or enable{" "}
-            <code>AUTH_DEV_MODE</code>.
+            Sign-in is disabled. Enable <code>AUTH_DEV_MODE</code> on the server.
           </p>
         )}
       </div>

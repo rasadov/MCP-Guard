@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { useEffect } from "react";
 
 export default function OverviewPage() {
-  const { status } = useAuth();
+  const { user, status } = useAuth();
   const enabled = status === "authenticated";
 
   const statsQuery = useApiQuery("overview-stats", () => client.stats(), enabled);
@@ -49,11 +49,13 @@ export default function OverviewPage() {
         <header className="page-header">
           <div>
             <h2>Overview</h2>
-            <p className="muted">Live gateway activity and recent tool calls</p>
+            <p className="muted">Your MCP activity and recent tool calls</p>
           </div>
-          <Link className="btn btn-secondary" to="/governance">
-            Manage access
-          </Link>
+          {user?.role === "admin" && (
+            <Link className="btn btn-secondary" to="/governance">
+              Governance
+            </Link>
+          )}
         </header>
 
         <div className="stat-grid">

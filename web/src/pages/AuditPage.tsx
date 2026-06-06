@@ -37,7 +37,7 @@ export default function AuditPage() {
         <header className="page-header">
           <div>
             <h2>Audit Log</h2>
-            <p className="muted">Every MCP tool call through the gateway</p>
+            <p className="muted">Your MCP tool calls through the gateway</p>
           </div>
           <div className="btn-row">
             <a className="btn btn-secondary" href="/api/v1/audit/export?format=json">

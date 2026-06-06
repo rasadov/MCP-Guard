@@ -10,9 +10,6 @@ import (
 )
 
 func (h *Handlers) ownedAgentIDs(claims *auth.Claims) (scoped bool, ids []uuid.UUID, err error) {
-	if claims.Role == "admin" {
-		return false, nil, nil
-	}
 	var agents []models.Agent
 	if err := h.db.Where("owner_user_id = ?", claims.UserID).Select("id").Find(&agents).Error; err != nil {
 		return true, nil, err

@@ -23,7 +23,6 @@ type Handlers struct {
 	db       *gorm.DB
 	cfg      config.Config
 	jwt      *auth.JWTService
-	google   *auth.GoogleAuth
 	apiKeys  *auth.APIKeyService
 	audit    *audit.Service
 	shadow   *shadow.Service
@@ -35,7 +34,6 @@ func NewHandlers(
 	db *gorm.DB,
 	cfg config.Config,
 	jwt *auth.JWTService,
-	google *auth.GoogleAuth,
 	apiKeys *auth.APIKeyService,
 	auditSvc *audit.Service,
 	shadowSvc *shadow.Service,
@@ -46,7 +44,6 @@ func NewHandlers(
 		db:       db,
 		cfg:      cfg,
 		jwt:      jwt,
-		google:   google,
 		apiKeys:  apiKeys,
 		audit:    auditSvc,
 		shadow:   shadowSvc,
@@ -83,13 +80,12 @@ func (h *Handlers) Register(r *gin.RouterGroup) {
 	r.POST("/agents", JWTMiddleware(h.jwt), h.createAgent)
 	r.PUT("/agents/:id", JWTMiddleware(h.jwt), RequireAdmin(), h.updateAgent)
 	r.POST("/agents/:id/rotate-key", JWTMiddleware(h.jwt), h.rotateAgentKey)
+	r.DELETE("/agents/:id", JWTMiddleware(h.jwt), h.deleteAgent)
 }
 
 func (h *Handlers) RegisterAuth(r *gin.RouterGroup) {
 	r.GET("/config", h.authConfig)
 	r.GET("/logout", h.logout)
-	r.GET("/google", h.googleLogin)
-	r.GET("/google/callback", h.googleCallback)
 	if h.cfg.AuthDevMode {
 		r.GET("/dev-login", h.devLogin)
 	}
@@ -97,8 +93,7 @@ func (h *Handlers) RegisterAuth(r *gin.RouterGroup) {
 
 func (h *Handlers) authConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"google_enabled":     h.google.Enabled(),
-		"dev_login_enabled":  h.cfg.AuthDevMode,
+		"dev_login_enabled": h.cfg.AuthDevMode,
 	})
 }
 
@@ -116,40 +111,6 @@ func (h *Handlers) me(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, user)
-}
-
-func (h *Handlers) googleLogin(c *gin.Context) {
-	if !h.google.Enabled() {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "google oauth not configured"})
-		return
-	}
-	c.Redirect(http.StatusTemporaryRedirect, h.google.AuthCodeURL("state"))
-}
-
-func (h *Handlers) googleCallback(c *gin.Context) {
-	code := c.Query("code")
-	if code == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing code"})
-		return
-	}
-	gUser, err := h.google.ExchangeUser(c.Request.Context(), code)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	user, err := h.upsertGoogleUser(gUser)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	token, err := h.jwt.Issue(*user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("mcp_guard_token", token, int(h.cfg.JWTExpiry.Seconds()), "/", "", false, true)
-	c.Redirect(http.StatusTemporaryRedirect, "/")
 }
 
 func (h *Handlers) devLogin(c *gin.Context) {
@@ -170,29 +131,6 @@ func (h *Handlers) devLogin(c *gin.Context) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("mcp_guard_token", token, int(h.cfg.JWTExpiry.Seconds()), "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, "/")
-}
-
-func (h *Handlers) upsertGoogleUser(gUser *auth.GoogleUser) (*models.User, error) {
-	var user models.User
-	err := h.db.Where("google_sub = ?", gUser.Sub).First(&user).Error
-	if err == gorm.ErrRecordNotFound {
-		sub := gUser.Sub
-		user = models.User{
-			GoogleSub: &sub,
-			Email:     gUser.Email,
-			Name:      gUser.Name,
-			Role:      "user",
-		}
-		return &user, h.db.Create(&user).Error
-	}
-	if err != nil {
-		return nil, err
-	}
-	sub := gUser.Sub
-	user.GoogleSub = &sub
-	user.Email = gUser.Email
-	user.Name = gUser.Name
-	return &user, h.db.Save(&user).Error
 }
 
 func (h *Handlers) listAudit(c *gin.Context) {
@@ -564,11 +502,16 @@ func (h *Handlers) updateAgent(c *gin.Context) {
 
 func (h *Handlers) listAgents(c *gin.Context) {
 	claims := GetClaims(c)
-	var agents []models.Agent
 	q := h.db.Preload("Skill")
-	if claims.Role != "admin" {
+	if c.Query("all") == "true" {
+		if claims.Role != "admin" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+			return
+		}
+	} else {
 		q = q.Where("owner_user_id = ?", claims.UserID)
 	}
+	var agents []models.Agent
 	q.Find(&agents)
 	c.JSON(http.StatusOK, agents)
 }
@@ -623,6 +566,38 @@ func (h *Handlers) rotateAgentKey(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"api_key": apiKey})
+}
+
+func (h *Handlers) deleteAgent(c *gin.Context) {
+	claims := GetClaims(c)
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	var agent models.Agent
+	if err := h.db.First(&agent, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	if claims.Role != "admin" && agent.OwnerUserID != claims.UserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("agent_id = ?", id).Delete(&models.APIKey{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("agent_id = ?", id).Delete(&models.Session{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&agent).Error
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func queryInt(c *gin.Context, key string, fallback int) int {

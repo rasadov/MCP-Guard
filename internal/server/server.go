@@ -36,7 +36,6 @@ func New(cfg config.Config, db *gorm.DB, webFS embed.FS, downstream *mcpgw.Downs
 
 	apiKeys := auth.NewAPIKeyService(db)
 	jwtSvc := auth.NewJWTService(cfg.JWTSecret, cfg.JWTExpiry)
-	googleAuth := auth.NewGoogleAuth(cfg.Google)
 	policyEngine := policy.NewEngine()
 	auditSvc := audit.NewService(db)
 	shadowSvc := shadow.NewService(db)
@@ -53,7 +52,7 @@ func New(cfg config.Config, db *gorm.DB, webFS embed.FS, downstream *mcpgw.Downs
 	}
 
 	gateway := mcpgw.NewGateway(db, downstream, apiKeys, policyEngine, auditSvc)
-	handlers := api.NewHandlers(db, cfg, jwtSvc, googleAuth, apiKeys, auditSvc, shadowSvc, policyEngine, toolList)
+	handlers := api.NewHandlers(db, cfg, jwtSvc, apiKeys, auditSvc, shadowSvc, policyEngine, toolList)
 
 	s := &Server{cfg: cfg, db: db, r: r, downstream: downstream}
 	s.registerRoutes(webFS, gateway, handlers)

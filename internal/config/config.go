@@ -11,17 +11,10 @@ type Config struct {
 	DatabaseURL  string
 	JWTSecret    string
 	JWTExpiry    time.Duration
-	Google       GoogleConfig
 	AuthDevMode  bool
 	Slack        SlackConfig
 	SlackMCPPath string
 	SeedOnStart  bool
-}
-
-type GoogleConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
 }
 
 type SlackConfig struct {
@@ -35,11 +28,6 @@ func Load() Config {
 		DatabaseURL:  getEnv("DATABASE_URL", "postgres://mcpguard:mcpguard@localhost:5432/mcpguard?sslmode=disable"),
 		JWTSecret:    getEnv("JWT_SECRET", "dev-secret-change-in-production"),
 		JWTExpiry:    time.Duration(jwtHours) * time.Hour,
-		Google: GoogleConfig{
-			ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-			ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-			RedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback"),
-		},
 		AuthDevMode:  getEnvBool("AUTH_DEV_MODE", true),
 		Slack:        SlackConfig{BotToken: os.Getenv("SLACK_BOT_TOKEN")},
 		SlackMCPPath: getEnv("SLACK_MCP_PATH", "slack-mcp-server"),

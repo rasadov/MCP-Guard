@@ -3,7 +3,7 @@
 ## Authentication
 
 - **Agents**: API keys (`mcpg_<prefix>_<secret>`), bcrypt-hashed in database
-- **Dashboard**: Google OAuth or dev login (`AUTH_DEV_MODE=true` only for local)
+- **Dashboard**: Dev login (`AUTH_DEV_MODE=true`)
 - **Sessions**: JWT in HttpOnly cookie
 
 ## Authorization (RBAC)

@@ -1,5 +1,4 @@
 export type AuthConfig = {
-  google_enabled: boolean;
   dev_login_enabled: boolean;
 };
 
@@ -120,6 +119,7 @@ export const client = {
   skills: () => api<Skill[]>("/skills"),
   policies: () => api<Policy[]>("/policies"),
   agents: () => api<Agent[]>("/agents"),
+  allAgents: () => api<Agent[]>("/agents?all=true"),
   activeAgents: () => api<ActiveSession[]>("/agents/active"),
   setPolicyDenyTool: (policyId: string, toolName: string, blocked: boolean) =>
     api<Policy>(`/policies/${policyId}/deny-tools`, {
@@ -140,6 +140,8 @@ export const client = {
     api<{ api_key: string }>(`/agents/${agentId}/rotate-key`, {
       method: "POST",
     }),
+  deleteAgent: (agentId: string) =>
+    api<void>(`/agents/${agentId}`, { method: "DELETE" }),
 };
 
 export function skillTools(skill: Skill | undefined): string[] {

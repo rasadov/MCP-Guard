@@ -53,6 +53,7 @@ export default function AgentsPage() {
   const [skillId, setSkillId] = useState("");
   const [creating, setCreating] = useState(false);
   const [rotating, setRotating] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [revealedKey, setRevealedKey] = useState<{ key: string; title: string } | null>(null);
 
@@ -105,6 +106,26 @@ export default function AgentsPage() {
       window.alert(err instanceof Error ? err.message : "Failed to rotate key");
     } finally {
       setRotating(null);
+    }
+  }
+
+  async function handleDelete(agent: Agent) {
+    if (
+      !window.confirm(
+        `Delete agent "${agent.name}"? Its API keys will stop working immediately.`
+      )
+    ) {
+      return;
+    }
+
+    setDeleting(agent.id);
+    try {
+      await client.deleteAgent(agent.id);
+      agentsQuery.refetch();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to delete agent");
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -173,14 +194,24 @@ export default function AgentsPage() {
                 <p className="muted small">
                   Skill: {agent.skill?.name ?? "None"} · {skillTools(agent.skill).length} tools
                 </p>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={rotating === agent.id}
-                  onClick={() => void handleRotate(agent)}
-                >
-                  {rotating === agent.id ? "Rotating..." : "Rotate API key"}
-                </button>
+                <div className="btn-row">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={rotating === agent.id || deleting === agent.id}
+                    onClick={() => void handleRotate(agent)}
+                  >
+                    {rotating === agent.id ? "Rotating..." : "Rotate API key"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    disabled={rotating === agent.id || deleting === agent.id}
+                    onClick={() => void handleDelete(agent)}
+                  >
+                    {deleting === agent.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
               </div>
             ))}
             {agents.length === 0 && (

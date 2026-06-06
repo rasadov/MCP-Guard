@@ -29,7 +29,7 @@ flowchart LR
 | `internal/mcp` | Agent-facing MCP server + Slack client proxy |
 | `internal/policy` | Skill + rule evaluation |
 | `internal/audit` | Persist and export audit logs |
-| `internal/auth` | API keys, JWT, Google OAuth |
+| `internal/auth` | API keys, JWT |
 | `internal/api` | REST handlers for dashboard |
 | `internal/shadow` | Shadow AI event detection |
 | `web/` | React governance UI (embedded in Go binary) |

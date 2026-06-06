@@ -4,7 +4,7 @@
 
 1. MCP Guard running: `docker compose up`
 2. Gemini CLI installed
-3. Dashboard login (dev login or Google OAuth)
+3. Dashboard login via dev login (`admin@mcpguard.local` when `AUTH_DEV_MODE=true`)
 
 ## Create an API key
 

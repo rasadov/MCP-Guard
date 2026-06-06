@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
-import { useAuth } from "../auth";
 import { useApiQuery } from "../useApiQuery";
-import { AuthRequired, RequestState } from "../RequestState";
+import { RequestState } from "../RequestState";
 import {
   Agent,
   Policy,
@@ -42,16 +41,14 @@ function Toggle({
 }
 
 export default function GovernancePage() {
-  const { user, status } = useAuth();
-  const enabled = status === "authenticated" && user?.role === "admin";
   const [filter, setFilter] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [policy, setPolicy] = useState<Policy | null>(null);
 
-  const toolsQuery = useApiQuery("gov-tools", () => client.tools(), enabled);
-  const policiesQuery = useApiQuery("gov-policies", () => client.policies(), enabled);
-  const agentsQuery = useApiQuery("gov-agents", () => client.agents(), enabled);
-  const skillsQuery = useApiQuery("gov-skills", () => client.skills(), enabled);
+  const toolsQuery = useApiQuery("gov-tools", () => client.tools(), true);
+  const policiesQuery = useApiQuery("gov-policies", () => client.policies(), true);
+  const agentsQuery = useApiQuery("gov-agents", () => client.allAgents(), true);
+  const skillsQuery = useApiQuery("gov-skills", () => client.skills(), true);
   const activePolicy =
     policy ??
     policiesQuery.data?.find((p) => p.name === "default") ??
@@ -68,29 +65,12 @@ export default function GovernancePage() {
   }, [tools, filter]);
 
   const loading =
-    status === "loading" ||
     toolsQuery.loading ||
     policiesQuery.loading ||
     agentsQuery.loading ||
     skillsQuery.loading;
-  const unauthorized =
-    status === "unauthenticated" ||
-    toolsQuery.unauthorized ||
-    policiesQuery.unauthorized;
   const error =
     toolsQuery.error || policiesQuery.error || agentsQuery.error || skillsQuery.error;
-
-  if (status === "loading") return <p className="muted">Loading...</p>;
-  if (status === "unauthenticated" || unauthorized) return <AuthRequired />;
-  if (user?.role !== "admin") {
-    return (
-      <div className="page">
-        <div className="card">
-          <p className="muted">Admin access required to manage governance settings.</p>
-        </div>
-      </div>
-    );
-  }
 
   async function toggleTool(toolName: string, blocked: boolean) {
     if (!activePolicy) return;
@@ -122,7 +102,7 @@ export default function GovernancePage() {
           <div>
             <h2>Governance</h2>
             <p className="muted">
-              Block tools globally or change an agent&apos;s skill. Changes apply on the next MCP tool call.
+              Organization-wide policies, skills, and agent skill assignments.
             </p>
           </div>
         </header>
@@ -135,7 +115,7 @@ export default function GovernancePage() {
 
         <section className="card">
           <div className="section-head">
-            <h3>Agents</h3>
+            <h3>All agents</h3>
             <span className="muted">{agents.length} registered</span>
           </div>
           <div className="agent-grid">

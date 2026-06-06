@@ -73,6 +73,16 @@ a {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.nav-divider {
+  margin: 1.25rem 0 0.5rem;
+  padding: 0 0.85rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
 .sidebar-footer {
   margin-top: auto;
   padding-top: 1.5rem;
@@ -259,6 +269,16 @@ button,
   background: white;
   color: #0f172a;
   border: 1px solid #cbd5e1;
+}
+
+.btn-danger {
+  background: white;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.btn-danger:hover {
+  background: #fef2f2;
 }
 
 .btn-sm {
@@ -502,24 +522,10 @@ select {
   margin-bottom: 1.5rem;
 }
 
-.btn-google {
-  width: 100%;
-  background: white;
-  color: #0f172a;
-  border: 1px solid #cbd5e1;
-}
-
 .dev-login-form {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-}
-
-.login-divider {
-  text-align: center;
-  color: #94a3b8;
-  font-size: 0.82rem;
-  margin: 0.5rem 0;
 }
 
 .sign-out-link {

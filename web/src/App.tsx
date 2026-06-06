@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { AdminRoute } from "./AdminRoute";
 import OverviewPage from "./pages/OverviewPage";
 import GovernancePage from "./pages/GovernancePage";
 import AuditPage from "./pages/AuditPage";
@@ -9,6 +10,7 @@ import LoginPage from "./pages/LoginPage";
 
 function AppShell() {
   const { user, status } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="layout">
@@ -22,8 +24,13 @@ function AppShell() {
             Overview
           </NavLink>
           <NavLink to="/agents">Agents</NavLink>
-          <NavLink to="/governance">Governance</NavLink>
           <NavLink to="/audit">Audit Log</NavLink>
+          {isAdmin && (
+            <>
+              <div className="nav-divider">Admin</div>
+              <NavLink to="/governance">Governance</NavLink>
+            </>
+          )}
         </nav>
         <div className="sidebar-footer">
           {status === "loading" ? (
@@ -44,8 +51,15 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="/agents" element={<AgentsPage />} />
-            <Route path="/governance" element={<GovernancePage />} />
             <Route path="/audit" element={<AuditPage />} />
+            <Route
+              path="/governance"
+              element={
+                <AdminRoute>
+                  <GovernancePage />
+                </AdminRoute>
+              }
+            />
           </Routes>
         </div>
       </main>

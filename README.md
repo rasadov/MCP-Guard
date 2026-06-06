@@ -9,10 +9,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open http://localhost:8080 and sign in:
-
-- **Production:** Sign in with Google (configure `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`)
-- **Local dev:** Use the login page dev login with `admin@mcpguard.local` when `AUTH_DEV_MODE=true`
+Open http://localhost:8080/login and sign in with a seeded user email (e.g. `admin@mcpguard.local`) when `AUTH_DEV_MODE=true`.
 
 ## Agent API keys
 

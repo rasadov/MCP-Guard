@@ -27,9 +27,6 @@ services:
       SEED_ON_START: "true"
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
       SLACK_MCP_PATH: /usr/local/bin/slack-mcp-server
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:8080/auth/google/callback}
     depends_on:
       postgres:
         condition: service_healthy
