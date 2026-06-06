@@ -41,9 +41,9 @@ func NewGateway(db *gorm.DB, downstream *Downstream, apiKeys *auth.APIKeyService
 
 func (g *Gateway) Handler() http.Handler {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
-		agent, err := g.authenticate(req)
+		agent, err := g.agentForRequest(req)
 		if err != nil {
-			slog.Warn("mcp auth failed", "error", err, "has_auth_header", req.Header.Get("Authorization") != "")
+			slog.Warn("mcp session lookup failed", "error", err, "has_auth_header", req.Header.Get("Authorization") != "", "session_id", req.Header.Get("Mcp-Session-Id") != "")
 			return nil
 		}
 		sessionID := req.Header.Get("Mcp-Session-Id")
@@ -64,6 +64,35 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		mcpHandler.ServeHTTP(w, r)
 	})
+}
+
+func (g *Gateway) agentForRequest(req *http.Request) (*models.Agent, error) {
+	sessionID := req.Header.Get("Mcp-Session-Id")
+	if sessionID != "" {
+		if v, ok := g.sessions.Load(sessionID); ok {
+			return g.reloadAgent(v.(*models.Agent).ID)
+		}
+		// First follow-up after initialize: bind session using Bearer auth.
+		agent, err := g.authenticate(req)
+		if err != nil {
+			return nil, fmt.Errorf("session not found")
+		}
+		g.sessions.Store(sessionID, agent)
+		return g.reloadAgent(agent.ID)
+	}
+	agent, err := g.authenticate(req)
+	if err != nil {
+		return nil, err
+	}
+	return g.reloadAgent(agent.ID)
+}
+
+func (g *Gateway) reloadAgent(id uuid.UUID) (*models.Agent, error) {
+	var agent models.Agent
+	if err := g.db.Preload("Owner").Preload("Skill").First(&agent, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &agent, nil
 }
 
 func (g *Gateway) authenticate(req *http.Request) (*models.Agent, error) {

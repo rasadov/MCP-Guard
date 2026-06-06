@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "../auth";
 import { useApiQuery } from "../useApiQuery";
 import { RequestState } from "../RequestState";
@@ -9,11 +9,17 @@ export default function AuditPage() {
   const enabled = status === "authenticated";
   const [outcome, setOutcome] = useState<"all" | "allowed" | "denied" | "error">("all");
 
-  const { data: logs, loading, error, unauthorized } = useApiQuery(
+  const { data: logs, loading, error, unauthorized, refetch } = useApiQuery(
     "audit",
     () => client.audit(),
     enabled
   );
+
+  useEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(() => refetch(), 5000);
+    return () => window.clearInterval(id);
+  }, [enabled, refetch]);
 
   const filtered = useMemo(() => {
     const items = logs ?? [];

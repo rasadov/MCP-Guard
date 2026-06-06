@@ -3,6 +3,7 @@ import { useApiQuery } from "../useApiQuery";
 import { RequestState } from "../RequestState";
 import { client, displayToolName } from "../api";
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
 
 export default function OverviewPage() {
   const { status } = useAuth();
@@ -15,6 +16,16 @@ export default function OverviewPage() {
     () => client.activeAgents(),
     enabled
   );
+
+  useEffect(() => {
+    if (!enabled) return;
+    const id = window.setInterval(() => {
+      statsQuery.refetch();
+      auditQuery.refetch();
+      sessionsQuery.refetch();
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [enabled, statsQuery.refetch, auditQuery.refetch, sessionsQuery.refetch]);
 
   const loading =
     status === "loading" ||
