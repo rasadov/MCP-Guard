@@ -9,25 +9,26 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open http://localhost:8080 and log in via dev auth:
+Open http://localhost:8080 and sign in:
 
-http://localhost:8080/auth/dev-login?email=admin@mcpguard.local
+- **Production:** Sign in with Google (configure `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`)
+- **Local dev:** Use the login page dev login with `admin@mcpguard.local` when `AUTH_DEV_MODE=true`
 
-## Demo API Key
+## Agent API keys
 
-Seed creates a demo agent key:
+API keys are not seeded. After signing in:
 
-```
-mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c
-```
+1. Open **Agents** in the dashboard
+2. Create an agent (optionally assign a skill)
+3. Copy the one-time API key shown after creation
 
-## Gemini CLI
+Use that key with MCP clients:
 
 ```bash
-gemini mcp add --transport http --header "Authorization: Bearer mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c" mcp-guard http://localhost:8080/mcp
+gemini mcp add --transport http --header "Authorization: Bearer <your_api_key>" mcp-guard http://localhost:8080/mcp
 ```
 
-See [scripts/demo-gemini.md](scripts/demo-gemini.md) for the full walkthrough.
+See [scripts/demo-gemini.md](scripts/demo-gemini.md) for a full walkthrough.
 
 ## Architecture
 

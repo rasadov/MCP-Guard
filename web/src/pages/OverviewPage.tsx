@@ -81,7 +81,10 @@ export default function OverviewPage() {
               <h3>Active agents</h3>
             </div>
             {sessions.length === 0 ? (
-              <p className="muted">No active MCP sessions. Connect Gemini with the demo API key.</p>
+              <p className="muted">
+                No active MCP sessions.{" "}
+                <Link to="/agents">Create an agent and API key</Link> to connect a client.
+              </p>
             ) : (
               <table>
                 <thead>
@@ -151,7 +154,7 @@ export default function OverviewPage() {
               {audit.length === 0 && (
                 <tr>
                   <td colSpan={4} className="muted">
-                    No audit events yet. Ask Gemini to read Slack via MCP Guard.
+                    No audit events yet. Connect an MCP client with an agent API key to get started.
                   </td>
                 </tr>
               )}

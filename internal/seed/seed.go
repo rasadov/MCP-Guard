@@ -2,19 +2,19 @@ package seed
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/rasadov/mcp-guard/internal/models"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
-const DemoAPIKey = "mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c"
-
 func Run(db *gorm.DB) error {
+	if err := cleanupDemoCredentials(db); err != nil {
+		return err
+	}
+
 	var count int64
 	if err := db.Model(&models.User{}).Count(&count).Error; err != nil {
 		return err
@@ -23,13 +23,22 @@ func Run(db *gorm.DB) error {
 		if err := seedAll(db); err != nil {
 			return err
 		}
-	} else {
-		slog.Info("seed skipped full bootstrap, ensuring demo credentials")
 	}
-	if err := ensureDefaultPolicy(db); err != nil {
+	return ensureDefaultPolicy(db)
+}
+
+func cleanupDemoCredentials(db *gorm.DB) error {
+	if err := db.Where("prefix = ?", "demo").Delete(&models.APIKey{}).Error; err != nil {
 		return err
 	}
-	return ensureDemoCredentials(db)
+	result := db.Where("name = ?", "gemini-demo").Delete(&models.Agent{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 {
+		slog.Info("removed demo agent credentials")
+	}
+	return nil
 }
 
 func defaultPolicyRules() datatypes.JSON {
@@ -80,7 +89,6 @@ func seedAll(db *gorm.DB) error {
 	userID := uuid.New()
 	readonlySkillID := uuid.New()
 	posterSkillID := uuid.New()
-	agentID := uuid.New()
 
 	readonlyTools, _ := json.Marshal([]string{
 		"slack.conversations_history",
@@ -106,19 +114,12 @@ func seedAll(db *gorm.DB) error {
 		"SLACK_MCP_XOXP_TOKEN": "${SLACK_BOT_TOKEN}",
 	})
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(DemoAPIKey), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
 	records := []any{
 		&models.User{ID: adminID, Email: "admin@mcpguard.local", Name: "Admin", Role: "admin", Team: "platform"},
 		&models.User{ID: userID, Email: "user@mcpguard.local", Name: "User", Role: "user", Team: "marketing"},
 		&models.Skill{ID: readonlySkillID, Name: "Marketing Readonly", Slug: "marketing-readonly", Description: "Read-only Slack access", Tools: datatypes.JSON(readonlyTools)},
 		&models.Skill{ID: posterSkillID, Name: "Marketing Poster", Slug: "marketing-poster", Description: "Read + post to allowed channel", Tools: datatypes.JSON(posterTools), Constraints: datatypes.JSON(posterConstraints)},
 		&models.Policy{Name: "default", Description: "Default governance policy", Rules: policyRules, Enabled: true},
-		&models.Agent{ID: agentID, Name: "gemini-demo", OwnerUserID: adminID, SkillID: &readonlySkillID},
-		&models.APIKey{AgentID: agentID, Prefix: "demo", Hash: string(hash)},
 		&models.Connector{Name: "Slack", Slug: "slack", Command: "slack-mcp-server", Args: datatypes.JSON(connectorArgs), Env: datatypes.JSON(connectorEnv), Enabled: true},
 	}
 
@@ -128,83 +129,7 @@ func seedAll(db *gorm.DB) error {
 				return err
 			}
 		}
-		slog.Info("seed data created", "demo_api_key", DemoAPIKey)
+		slog.Info("seed data created")
 		return nil
 	})
-}
-
-func ensureDemoCredentials(db *gorm.DB) error {
-	hash, err := bcrypt.GenerateFromPassword([]byte(DemoAPIKey), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	var existing models.APIKey
-	err = db.Where("prefix = ?", "demo").First(&existing).Error
-	if err == nil {
-		if bcrypt.CompareHashAndPassword([]byte(existing.Hash), []byte(DemoAPIKey)) == nil {
-			return nil
-		}
-		if err := db.Model(&existing).Update("hash", string(hash)).Error; err != nil {
-			return err
-		}
-		slog.Info("demo api key hash refreshed")
-		return nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-
-	readonlyTools, _ := json.Marshal([]string{
-		"slack.conversations_history",
-		"slack.conversations_replies",
-		"slack.conversations_search_messages",
-		"slack.channels_list",
-	})
-
-	var admin models.User
-	if err := db.Where("email = ?", "admin@mcpguard.local").First(&admin).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		admin = models.User{Email: "admin@mcpguard.local", Name: "Admin", Role: "admin", Team: "platform"}
-		if err := db.Create(&admin).Error; err != nil {
-			return err
-		}
-	}
-
-	var skill models.Skill
-	if err := db.Where("slug = ?", "marketing-readonly").First(&skill).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		skill = models.Skill{
-			Name:        "Marketing Readonly",
-			Slug:        "marketing-readonly",
-			Description: "Read-only Slack access",
-			Tools:       datatypes.JSON(readonlyTools),
-		}
-		if err := db.Create(&skill).Error; err != nil {
-			return err
-		}
-	}
-
-	var agent models.Agent
-	if err := db.Where("name = ?", "gemini-demo").First(&agent).Error; err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		skillID := skill.ID
-		agent = models.Agent{Name: "gemini-demo", OwnerUserID: admin.ID, SkillID: &skillID}
-		if err := db.Create(&agent).Error; err != nil {
-			return err
-		}
-	}
-
-	key := models.APIKey{AgentID: agent.ID, Prefix: "demo", Hash: string(hash)}
-	if err := db.Create(&key).Error; err != nil {
-		return err
-	}
-	slog.Info("demo credentials restored", "demo_api_key", DemoAPIKey)
-	return nil
 }

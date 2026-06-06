@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
-import { ApiError, DEV_LOGIN_URL } from "./api";
+import { Link } from "react-router-dom";
+import { ApiError } from "./api";
 
 type RequestStateProps = {
   loading?: boolean;
@@ -19,9 +20,9 @@ export function AuthRequired({
     <div className="auth-required card">
       <h3>Sign in required</h3>
       <p className="muted">{message}</p>
-      <a className="btn" href={DEV_LOGIN_URL}>
-        Dev login
-      </a>
+      <Link className="btn" to="/login">
+        Sign in
+      </Link>
     </div>
   );
 }

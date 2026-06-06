@@ -1,2 +1,2 @@
 -- Reference seed data; application seed runs via internal/seed on startup.
--- Demo API key: mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c
+-- Agent API keys are created in the dashboard Agents page.

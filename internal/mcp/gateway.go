@@ -16,7 +16,6 @@ import (
 	"github.com/rasadov/mcp-guard/internal/auth"
 	"github.com/rasadov/mcp-guard/internal/models"
 	"github.com/rasadov/mcp-guard/internal/policy"
-	"github.com/rasadov/mcp-guard/internal/seed"
 	"gorm.io/gorm"
 )
 
@@ -58,7 +57,7 @@ func (g *Gateway) Handler() http.Handler {
 		// Only require auth when establishing a new MCP session (no session header yet).
 		if r.Header.Get("Mcp-Session-Id") == "" {
 			if _, err := g.authenticate(r); err != nil {
-				http.Error(w, "unauthorized: set Authorization: Bearer <mcp_guard_api_key> (demo: "+seed.DemoAPIKey+")", http.StatusUnauthorized)
+				http.Error(w, "unauthorized: set Authorization: Bearer <api_key> (create keys in the dashboard Agents page)", http.StatusUnauthorized)
 				return
 			}
 		}

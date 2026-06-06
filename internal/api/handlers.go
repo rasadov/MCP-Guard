@@ -86,11 +86,26 @@ func (h *Handlers) Register(r *gin.RouterGroup) {
 }
 
 func (h *Handlers) RegisterAuth(r *gin.RouterGroup) {
+	r.GET("/config", h.authConfig)
+	r.GET("/logout", h.logout)
 	r.GET("/google", h.googleLogin)
 	r.GET("/google/callback", h.googleCallback)
 	if h.cfg.AuthDevMode {
 		r.GET("/dev-login", h.devLogin)
 	}
+}
+
+func (h *Handlers) authConfig(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"google_enabled":     h.google.Enabled(),
+		"dev_login_enabled":  h.cfg.AuthDevMode,
+	})
+}
+
+func (h *Handlers) logout(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("mcp_guard_token", "", -1, "/", "", false, true)
+	c.Redirect(http.StatusTemporaryRedirect, "/login")
 }
 
 func (h *Handlers) me(c *gin.Context) {

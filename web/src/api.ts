@@ -1,3 +1,8 @@
+export type AuthConfig = {
+  google_enabled: boolean;
+  dev_login_enabled: boolean;
+};
+
 export type User = {
   id: string;
   email: string;
@@ -22,7 +27,7 @@ export type Stats = {
   top_tools: { tool_name: string; count: number }[];
 };
 
-export const DEV_LOGIN_URL = "/auth/dev-login?email=admin@mcpguard.local";
+export const DEV_LOGIN_EMAIL = "admin@mcpguard.local";
 
 export class ApiError extends Error {
   status: number;
@@ -54,6 +59,19 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+async function publicFetch<T>(path: string): Promise<T> {
+  const res = await fetch(path, { credentials: "include" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(body.error || res.statusText, res.status);
+  }
+  return res.json();
+}
+
+export function devLoginUrl(email: string) {
+  return `/auth/dev-login?email=${encodeURIComponent(email)}`;
 }
 
 export type PolicyRules = {
@@ -94,6 +112,7 @@ export type ActiveSession = {
 };
 
 export const client = {
+  authConfig: () => publicFetch<AuthConfig>("/auth/config"),
   me: () => api<User>("/me"),
   stats: () => api<Stats>("/stats"),
   audit: () => api<AuditLog[]>("/audit?limit=50"),
@@ -111,6 +130,15 @@ export const client = {
     api<Agent>(`/agents/${agentId}`, {
       method: "PUT",
       body: JSON.stringify({ skill_id: skillId }),
+    }),
+  createAgent: (body: { name: string; skill_id?: string | null }) =>
+    api<{ agent: Agent; api_key: string }>("/agents", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  rotateAgentKey: (agentId: string) =>
+    api<{ api_key: string }>(`/agents/${agentId}/rotate-key`, {
+      method: "POST",
     }),
 };
 

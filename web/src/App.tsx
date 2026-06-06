@@ -1,9 +1,11 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
-import { DEV_LOGIN_URL } from "./api";
+import { ProtectedRoute } from "./ProtectedRoute";
 import OverviewPage from "./pages/OverviewPage";
 import GovernancePage from "./pages/GovernancePage";
 import AuditPage from "./pages/AuditPage";
+import AgentsPage from "./pages/AgentsPage";
+import LoginPage from "./pages/LoginPage";
 
 function AppShell() {
   const { user, status } = useAuth();
@@ -19,6 +21,7 @@ function AppShell() {
           <NavLink to="/" end>
             Overview
           </NavLink>
+          <NavLink to="/agents">Agents</NavLink>
           <NavLink to="/governance">Governance</NavLink>
           <NavLink to="/audit">Audit Log</NavLink>
         </nav>
@@ -29,18 +32,18 @@ function AppShell() {
             <div className="user-chip">
               <strong>{user.name}</strong>
               <span className="muted">{user.role}</span>
+              <a className="sign-out-link" href="/auth/logout">
+                Sign out
+              </a>
             </div>
-          ) : (
-            <a className="btn btn-sm" href={DEV_LOGIN_URL}>
-              Dev login
-            </a>
-          )}
+          ) : null}
         </div>
       </aside>
       <main className="content-wrap">
         <div className="content">
           <Routes>
             <Route path="/" element={<OverviewPage />} />
+            <Route path="/agents" element={<AgentsPage />} />
             <Route path="/governance" element={<GovernancePage />} />
             <Route path="/audit" element={<AuditPage />} />
           </Routes>
@@ -53,7 +56,17 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppShell />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </AuthProvider>
   );
 }

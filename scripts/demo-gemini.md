@@ -4,28 +4,23 @@
 
 1. MCP Guard running: `docker compose up`
 2. Gemini CLI installed
-3. Demo API key from seed: `mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c`
+3. Dashboard login (dev login or Google OAuth)
+
+## Create an API key
+
+1. Open http://localhost:8080/login and sign in
+2. Go to **Agents** → **Create agent & key**
+3. Copy the one-time API key (it will not be shown again)
 
 ## Connect Gemini to MCP Guard
 
-Use the **MCP Guard agent API key** (not your Gemini API key):
-
-```
-mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c
-```
+Use the **MCP Guard agent API key** from the dashboard (not your Gemini API key):
 
 ```powershell
-gemini mcp add --transport http --header "Authorization: Bearer mcpg_demo_7f3a9b2c1d4e5f6a8b9c0d1e2f3a4b5c" mcp-guard http://localhost:8080/mcp
+gemini mcp add --transport http --header "Authorization: Bearer <your_api_key>" mcp-guard http://localhost:8080/mcp
 ```
 
-If you see `no server available` or `Disconnected`, the demo API key is missing from the database. Restart with a fresh volume or rebuild:
-
-```bash
-docker compose down -v
-docker compose up --build
-```
-
-Check gateway logs for `demo credentials restored` or `seed data created`.
+If you see `no server available` or `Disconnected`, verify the agent exists and the API key is correct. Create a new key from the Agents page if needed.
 
 ## Demo Flow
 
@@ -39,7 +34,7 @@ Expected: `slack.conversations_history` allowed, audit log shows `outcome=allowe
 
 ### 2. Blocked write (read-only skill)
 
-Ask Gemini:
+Create an agent with the **Marketing Readonly** skill, then ask Gemini:
 
 > Post the summary to #general.
 
@@ -47,7 +42,7 @@ Expected: denied with `skill_denied` or `policy_denied`, visible in dashboard au
 
 ### 3. Allowed write (poster skill)
 
-In dashboard, assign agent `gemini-demo` to `marketing-poster` skill, then retry post to allowed channel.
+In dashboard **Governance**, assign your agent to the `marketing-poster` skill, then retry post to allowed channel.
 
 Expected: `slack.conversations_add_message` allowed for channel `C00000000`.
 
@@ -65,7 +60,7 @@ Expected: denied via default policy (`slack.usergroups_create`).
 curl -X POST http://localhost:8080/api/v1/shadow-events ^
   -H "Cookie: mcp_guard_token=<admin-jwt>" ^
   -H "Content-Type: application/json" ^
-  -d "{\"agent_name\":\"gemini-demo\",\"tool_name\":\"slack.conversations_add_message\",\"source\":\"direct-slack-api\"}"
+  -d "{\"agent_name\":\"my-agent\",\"tool_name\":\"slack.conversations_add_message\",\"source\":\"direct-slack-api\"}"
 ```
 
 Open `/shadow` in dashboard to see the flag when no matching gateway audit exists.
