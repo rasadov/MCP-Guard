@@ -22,10 +22,11 @@ func NewService(db *gorm.DB) *Service {
 }
 
 type Query struct {
-	From    *time.Time
-	To      *time.Time
-	AgentID *uuid.UUID
-	Limit   int
+	From     *time.Time
+	To       *time.Time
+	AgentID  *uuid.UUID
+	AgentIDs []uuid.UUID
+	Limit    int
 }
 
 func (s *Service) Write(entry models.AuditLog) error {
@@ -46,6 +47,10 @@ func (s *Service) List(q Query) ([]models.AuditLog, error) {
 	}
 	if q.AgentID != nil {
 		query = query.Where("agent_id = ?", *q.AgentID)
+	} else if len(q.AgentIDs) > 0 {
+		query = query.Where("agent_id IN ?", q.AgentIDs)
+	} else if q.AgentIDs != nil {
+		query = query.Where("1 = 0")
 	}
 	var logs []models.AuditLog
 	return logs, query.Find(&logs).Error

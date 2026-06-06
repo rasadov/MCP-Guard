@@ -174,7 +174,7 @@ func (h *Handlers) devLogin(c *gin.Context) {
 
 func (h *Handlers) upsertGoogleUser(gUser *auth.GoogleUser) (*models.User, error) {
 	var user models.User
-	err := h.db.Where("google_sub = ? OR email = ?", gUser.Sub, gUser.Email).First(&user).Error
+	err := h.db.Where("google_sub = ?", gUser.Sub).First(&user).Error
 	if err == gorm.ErrRecordNotFound {
 		sub := gUser.Sub
 		user = models.User{
@@ -196,6 +196,13 @@ func (h *Handlers) upsertGoogleUser(gUser *auth.GoogleUser) (*models.User, error
 }
 
 func (h *Handlers) listAudit(c *gin.Context) {
+	claims := GetClaims(c)
+	scoped, agentIDs, err := h.ownedAgentIDs(claims)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	q := audit.Query{Limit: queryInt(c, "limit", 100)}
 	if from := c.Query("from"); from != "" {
 		if t, err := time.Parse(time.RFC3339, from); err == nil {
@@ -208,9 +215,18 @@ func (h *Handlers) listAudit(c *gin.Context) {
 		}
 	}
 	if agentID := c.Query("agent_id"); agentID != "" {
-		if id, err := uuid.Parse(agentID); err == nil {
-			q.AgentID = &id
+		id, err := uuid.Parse(agentID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent_id"})
+			return
 		}
+		if !agentAllowed(scoped, agentIDs, id) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		q.AgentID = &id
+	} else if scoped {
+		q.AgentIDs = agentIDs
 	}
 	logs, err := h.audit.List(q)
 	if err != nil {
@@ -221,7 +237,28 @@ func (h *Handlers) listAudit(c *gin.Context) {
 }
 
 func (h *Handlers) exportAudit(c *gin.Context) {
+	claims := GetClaims(c)
+	scoped, agentIDs, err := h.ownedAgentIDs(claims)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	q := audit.Query{Limit: queryInt(c, "limit", 1000)}
+	if agentID := c.Query("agent_id"); agentID != "" {
+		id, err := uuid.Parse(agentID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid agent_id"})
+			return
+		}
+		if !agentAllowed(scoped, agentIDs, id) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		q.AgentID = &id
+	} else if scoped {
+		q.AgentIDs = agentIDs
+	}
 	format := c.DefaultQuery("format", "json")
 	if format == "csv" {
 		c.Header("Content-Type", "text/csv")
@@ -277,17 +314,24 @@ func (h *Handlers) listTools(c *gin.Context) {
 }
 
 func (h *Handlers) stats(c *gin.Context) {
+	claims := GetClaims(c)
+	scoped, agentIDs, err := h.ownedAgentIDs(claims)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	var total, allowed, denied int64
-	h.db.Model(&models.AuditLog{}).Count(&total)
-	h.db.Model(&models.AuditLog{}).Where("outcome = ?", "allowed").Count(&allowed)
-	h.db.Model(&models.AuditLog{}).Where("outcome = ?", "denied").Count(&denied)
+	applyAgentIDScope(h.db.Model(&models.AuditLog{}), scoped, agentIDs).Count(&total)
+	applyAgentIDScope(h.db.Model(&models.AuditLog{}), scoped, agentIDs).Where("outcome = ?", "allowed").Count(&allowed)
+	applyAgentIDScope(h.db.Model(&models.AuditLog{}), scoped, agentIDs).Where("outcome = ?", "denied").Count(&denied)
 
 	type toolCount struct {
 		ToolName string `json:"tool_name"`
 		Count    int64  `json:"count"`
 	}
 	var topTools []toolCount
-	h.db.Model(&models.AuditLog{}).
+	applyAgentIDScope(h.db.Model(&models.AuditLog{}), scoped, agentIDs).
 		Select("tool_name, count(*) as count").
 		Group("tool_name").
 		Order("count desc").
@@ -303,8 +347,23 @@ func (h *Handlers) stats(c *gin.Context) {
 }
 
 func (h *Handlers) activeAgents(c *gin.Context) {
+	claims := GetClaims(c)
+	scoped, agentIDs, err := h.ownedAgentIDs(claims)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	q := h.db.Preload("Agent").Preload("Agent.Skill").Order("last_seen desc").Limit(50)
+	if scoped {
+		if len(agentIDs) == 0 {
+			c.JSON(http.StatusOK, []models.Session{})
+			return
+		}
+		q = q.Where("agent_id IN ?", agentIDs)
+	}
 	var sessions []models.Session
-	h.db.Preload("Agent").Preload("Agent.Skill").Order("last_seen desc").Limit(50).Find(&sessions)
+	q.Find(&sessions)
 	c.JSON(http.StatusOK, sessions)
 }
 
